@@ -10,7 +10,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // Task table
@@ -21,11 +20,11 @@ model Task {
   priority  Priority  @default(MEDIUM)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-}
 
-// Filter by category
-@@index([status])
-@@map("tasks")
+  // Filter by status
+  @@index([status])
+  @@map("tasks")
+}
 
 enum Status {
   TODO
