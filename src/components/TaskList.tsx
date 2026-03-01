@@ -17,6 +17,13 @@ type Props = {
 };
 
 const STATUS_CYCLE: Status[] = ["TODO", "DOING", "DONE"];
+const PRIORITY_CYCLE = ["LOW", "MEDIUM", "HIGH"] as const;
+type Priority = typeof PRIORITY_CYCLE[number];
+
+function nextPriority(current: string): Priority {
+  const i = PRIORITY_CYCLE.indexOf(current as Priority);
+  return PRIORITY_CYCLE[(i + 1) % PRIORITY_CYCLE.length];
+}
 
 const STATUS_LABEL: Record<Status, string> = {
   TODO:  "To do",
@@ -96,6 +103,26 @@ export function TaskList({ initialTasks }: Props) {
     }
   }
 
+  async function handleTogglePriority(task: Task) {
+    const next = nextPriority(task.priority);
+
+    setTasks(prev =>
+      prev.map(t => t.id === task.id ? { ...t, priority: next } : t)
+    );
+
+    const res = await fetch(`/api/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ priority: next }),
+    });
+
+    if (!res.ok) {
+      setTasks(prev =>
+        prev.map(t => t.id === task.id ? { ...t, priority: task.priority } : t)
+      );
+    }
+  }
+
   async function handleDelete(id: string) {
     setTasks(prev => prev.filter(t => t.id !== id));
     const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
@@ -117,7 +144,7 @@ export function TaskList({ initialTasks }: Props) {
           <h1 style={{ fontSize: 26, fontWeight: 700, color: "#f1f5f9", marginBottom: 4 }}>
             My Tasks
           </h1>
-          <p style={{ fontSize: 14, color: "#475569" }}>
+          <p style={{ fontSize: 14, color: "#94a3b8" }}>
             {done} of {total} tasks completed
           </p>
         </div>
@@ -141,7 +168,7 @@ export function TaskList({ initialTasks }: Props) {
         }}>
           {[
             { label: "Total",       value: total, accent: "#3b82f6" },
-            { label: "To do",       value: todo,  accent: "#475569" },
+            { label: "To do",       value: todo,  accent: "#94a3b8" },
             { label: "In progress", value: doing, accent: "#f59e0b" },
             { label: "Done",        value: done,  accent: "#22c55e" },
           ].map(({ label, value, accent }) => (
@@ -153,7 +180,7 @@ export function TaskList({ initialTasks }: Props) {
               padding: "16px 20px",
             }}>
               <p style={{
-                fontSize: 10, color: "#475569", fontWeight: 600,
+                fontSize: 10, color: "#94a3b8", fontWeight: 600,
                 textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8,
               }}>{label}</p>
               <p style={{ fontSize: 30, fontWeight: 700, color: "#f1f5f9" }}>{value}</p>
@@ -177,7 +204,7 @@ export function TaskList({ initialTasks }: Props) {
                     padding: "6px 14px", borderRadius: 20, fontSize: 13, cursor: "pointer",
                     fontWeight: active ? 600 : 400,
                     background: active ? "#f1f5f9" : "transparent",
-                    color: active ? "#0f172a" : "#475569",
+                    color: active ? "#0f172a" : "#94a3b8",
                     border: active ? "none" : "1px solid #1e293b",
                     transition: "all 0.15s",
                   }}
@@ -224,7 +251,7 @@ export function TaskList({ initialTasks }: Props) {
             }}>Save</button>
             <button type="button" onClick={() => setFormOpen(false)} style={{
               background: "none", border: "none", cursor: "pointer",
-              color: "#475569", fontSize: 18, lineHeight: 1,
+              color: "#94a3b8", fontSize: 18, lineHeight: 1,
             }}>✕</button>
           </form>
         )}
@@ -234,6 +261,7 @@ export function TaskList({ initialTasks }: Props) {
           background: "#0d1117", border: "1px solid #1e293b",
           borderRadius: 10, overflow: "hidden",
         }}>
+          {/* Column headers */}
           <div style={{
             display: "flex", alignItems: "center", gap: 12,
             padding: "10px 18px",
@@ -313,14 +341,27 @@ export function TaskList({ initialTasks }: Props) {
                   </button>
 
                   {/* Priority badge */}
-                  <span style={{
-                    width: 80, fontSize: 11, padding: "4px 10px", borderRadius: 20,
-                    fontWeight: 600, textAlign: "center",
-                    background: ps.bg, color: ps.color, border: `1px solid ${ps.border}`,
-                    display: "inline-block",
-                  }}>
+                  <button
+                    onClick={() => handleTogglePriority(task)}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.opacity = "0.75";
+                      e.currentTarget.style.transform = "scale(1.05)";
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.opacity = "1";
+                      e.currentTarget.style.transform = "scale(1)";
+                    }}
+                    title={`Click to change → ${PRIORITY_LABEL[nextPriority(priority)]}`}
+                    style={{
+                      width: 80, fontSize: 11, padding: "4px 10px", borderRadius: 20,
+                      fontWeight: 600, textAlign: "center", cursor: "pointer",
+                      background: ps.bg, color: ps.color, border: `1px solid ${ps.border}`,
+                      transition: "opacity 0.15s, transform 0.15s",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}
+                  >
                     {PRIORITY_LABEL[priority as keyof typeof PRIORITY_LABEL]}
-                  </span>
+                  </button>
 
                   {/* Delete */}
                   <button
@@ -338,10 +379,6 @@ export function TaskList({ initialTasks }: Props) {
             })
           )}
         </div>
-
-        <p style={{ marginTop: 20, fontSize: 11, color: "#1e293b", textAlign: "center" }}>
-          Click the status badge to cycle: To do → In progress → Done
-        </p>
       </div>
     </main>
   );
