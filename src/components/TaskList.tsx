@@ -16,33 +16,39 @@ type Props = {
   };
 };
 
+const STATUS_CYCLE: Status[] = ["TODO", "DOING", "DONE"];
+
 const STATUS_LABEL: Record<Status, string> = {
   TODO:  "To do",
   DOING: "In progress",
   DONE:  "Done",
 };
 
-const STATUS_NEXT: Record<Status, Status> = {
-  TODO:  "DOING",
-  DOING: "DONE",
-  DONE:  "TODO",
+const STATUS_STYLE: Record<Status, { color: string; bg: string; border: string }> = {
+  TODO:  { color: "#94a3b8", bg: "#0f172a",  border: "#334155" },
+  DOING: { color: "#fbbf24", bg: "#1c1200",  border: "#78350f" },
+  DONE:  { color: "#22c55e", bg: "#052e16",  border: "#14532d" },
 };
 
 const PRIORITY_LABEL = { LOW: "Low", MEDIUM: "Medium", HIGH: "High" } as const;
 
-const PRIORITY_COLOR: Record<string, { color: string; bg: string; border: string }> = {
+const PRIORITY_STYLE: Record<string, { color: string; bg: string; border: string }> = {
   HIGH:   { color: "#f87171", bg: "#1f0f0f", border: "#7f1d1d" },
   MEDIUM: { color: "#fbbf24", bg: "#1a1200", border: "#78350f" },
   LOW:    { color: "#94a3b8", bg: "#0f172a", border: "#334155" },
 };
 
-type FilterValue = "all" | Status;
+function nextStatus(current: Status): Status {
+  const i = STATUS_CYCLE.indexOf(current);
+  return STATUS_CYCLE[(i + 1) % STATUS_CYCLE.length];
+}
 
 export function TaskList({ initialTasks }: Props) {
   const [tasks, setTasks]       = useState<Task[]>(initialTasks);
-  const [filter, setFilter]     = useState<FilterValue>("all");
+  const [filter, setFilter]     = useState<"all" | Status>("all");
   const [newTitle, setNewTitle] = useState("");
   const [formOpen, setFormOpen] = useState(false);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   const total = tasks.length;
   const done  = tasks.filter(t => t.status === "DONE").length;
@@ -70,17 +76,17 @@ export function TaskList({ initialTasks }: Props) {
     }
   }
 
-  async function handleToggle(task: Task) {
-    const nextStatus = STATUS_NEXT[task.status as Status];
+  async function handleToggleStatus(task: Task) {
+    const next = nextStatus(task.status as Status);
 
     setTasks(prev =>
-      prev.map(t => t.id === task.id ? { ...t, status: nextStatus } : t)
+      prev.map(t => t.id === task.id ? { ...t, status: next } : t)
     );
 
     const res = await fetch(`/api/tasks/${task.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: nextStatus }),
+      body: JSON.stringify({ status: next }),
     });
 
     if (!res.ok) {
@@ -95,9 +101,6 @@ export function TaskList({ initialTasks }: Props) {
     const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
     if (!res.ok) setTasks(initialTasks);
   }
-
-  const dotColor = (status: Status) =>
-    status === "DONE" ? "#22c55e" : status === "DOING" ? "#f59e0b" : "#475569";
 
   return (
     <main style={{
@@ -121,7 +124,8 @@ export function TaskList({ initialTasks }: Props) {
 
         {/* Progress bar */}
         <div style={{
-          background: "#1e293b", borderRadius: 4, height: 4, marginBottom: 32, overflow: "hidden",
+          background: "#1e293b", borderRadius: 4, height: 4,
+          marginBottom: 32, overflow: "hidden",
         }}>
           <div style={{
             width: `${pct}%`, height: "100%",
@@ -157,7 +161,7 @@ export function TaskList({ initialTasks }: Props) {
           ))}
         </div>
 
-        {/* Filters + New task button */}
+        {/* Filters */}
         <div style={{
           display: "flex", justifyContent: "space-between",
           alignItems: "center", marginBottom: 12,
@@ -230,44 +234,46 @@ export function TaskList({ initialTasks }: Props) {
           background: "#0d1117", border: "1px solid #1e293b",
           borderRadius: 10, overflow: "hidden",
         }}>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 12,
+            padding: "10px 18px",
+            borderBottom: "1px solid #1e293b",
+          }}>
+            <span style={{ flex: 1, fontSize: 10, fontWeight: 600, color: "#334155",
+                           textTransform: "uppercase", letterSpacing: "0.08em" }}>Task</span>
+            <span style={{ fontSize: 10, fontWeight: 600, color: "#334155",
+                           textTransform: "uppercase", letterSpacing: "0.08em", width: 110 }}>Status</span>
+            <span style={{ fontSize: 10, fontWeight: 600, color: "#334155",
+                           textTransform: "uppercase", letterSpacing: "0.08em", width: 80 }}>Priority</span>
+            <span style={{ width: 24 }} />
+          </div>
+
           {visible.length === 0 ? (
             <p style={{
-              padding: 40, textAlign: "center",
-              color: "#334155", fontSize: 14,
+              padding: 40, textAlign: "center", color: "#334155", fontSize: 14,
             }}>
               No tasks here.
             </p>
           ) : (
             visible.map((task, i) => {
-              const status = task.status as Status;
+              const status   = task.status as Status;
               const priority = task.priority as string;
-              const pc = PRIORITY_COLOR[priority] ?? PRIORITY_COLOR.LOW;
+              const ss = STATUS_STYLE[status];
+              const ps = PRIORITY_STYLE[priority] ?? PRIORITY_STYLE.LOW;
               const isLast = i === visible.length - 1;
+              const isHovered = hoveredId === task.id;
 
               return (
                 <div key={task.id} style={{
                   display: "flex", alignItems: "center", gap: 12,
-                  padding: "14px 18px",
+                  padding: "13px 18px",
                   borderBottom: isLast ? "none" : "1px solid #0f172a",
-                }}>
-                  {/* Status toggle button */}
-                  <button
-                    onClick={() => handleToggle(task)}
-                    title={`Mark as: ${STATUS_LABEL[STATUS_NEXT[status]]}`}
-                    style={{
-                      width: 20, height: 20, borderRadius: "50%",
-                      flexShrink: 0, cursor: "pointer",
-                      background: status === "DONE" ? "#22c55e" : "transparent",
-                      border: `2px solid ${dotColor(status)}`,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      transition: "all 0.15s",
-                    }}
-                  >
-                    {status === "DONE" && (
-                      <span style={{ color: "#fff", fontSize: 10, lineHeight: 1 }}>✓</span>
-                    )}
-                  </button>
-
+                  background: isHovered ? "#0f1623" : "transparent",
+                  transition: "background 0.15s",
+                }}
+                  onMouseEnter={() => setHoveredId(task.id)}
+                  onMouseLeave={() => setHoveredId(null)}
+                >
                   {/* Title */}
                   <span style={{
                     flex: 1, fontSize: 14,
@@ -279,19 +285,39 @@ export function TaskList({ initialTasks }: Props) {
                   </span>
 
                   {/* Status badge */}
-                  <span style={{
-                    fontSize: 11, padding: "3px 10px", borderRadius: 20, fontWeight: 600,
-                    background: status === "DONE" ? "#052e16" : status === "DOING" ? "#1c1200" : "#0f172a",
-                    color: status === "DONE" ? "#22c55e" : status === "DOING" ? "#f59e0b" : "#475569",
-                    border: `1px solid ${status === "DONE" ? "#14532d" : status === "DOING" ? "#78350f" : "#1e293b"}`,
-                  }}>
+                  <button
+                    onClick={() => handleToggleStatus(task)}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.opacity = "0.75";
+                      e.currentTarget.style.transform = "scale(1.05)";
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.opacity = "1";
+                      e.currentTarget.style.transform = "scale(1)";
+                    }}
+                    title={`Click to change → ${STATUS_LABEL[nextStatus(status)]}`}
+                    style={{
+                      width: 110,
+                      fontSize: 11, padding: "4px 10px", borderRadius: 20, fontWeight: 600,
+                      background: ss.bg, color: ss.color, border: `1px solid ${ss.border}`,
+                      cursor: "pointer", textAlign: "center",
+                      transition: "opacity 0.15s, transform 0.15s",
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+                    }}
+                  >
+                    <span style={{
+                      width: 6, height: 6, borderRadius: "50%",
+                      background: ss.color, flexShrink: 0, display: "inline-block",
+                    }} />
                     {STATUS_LABEL[status]}
-                  </span>
+                  </button>
 
                   {/* Priority badge */}
                   <span style={{
-                    fontSize: 11, padding: "3px 10px", borderRadius: 20, fontWeight: 600,
-                    background: pc.bg, color: pc.color, border: `1px solid ${pc.border}`,
+                    width: 80, fontSize: 11, padding: "4px 10px", borderRadius: 20,
+                    fontWeight: 600, textAlign: "center",
+                    background: ps.bg, color: ps.color, border: `1px solid ${ps.border}`,
+                    display: "inline-block",
                   }}>
                     {PRIORITY_LABEL[priority as keyof typeof PRIORITY_LABEL]}
                   </span>
@@ -300,8 +326,8 @@ export function TaskList({ initialTasks }: Props) {
                   <button
                     onClick={() => handleDelete(task.id)}
                     style={{
-                      background: "none", border: "none", cursor: "pointer",
-                      color: "#1e293b", fontSize: 14, padding: "2px 4px",
+                      width: 24, background: "none", border: "none", cursor: "pointer",
+                      color: "#1e293b", fontSize: 14, padding: 0,
                       transition: "color 0.15s",
                     }}
                     onMouseEnter={e => (e.currentTarget.style.color = "#ef4444")}
@@ -312,6 +338,10 @@ export function TaskList({ initialTasks }: Props) {
             })
           )}
         </div>
+
+        <p style={{ marginTop: 20, fontSize: 11, color: "#1e293b", textAlign: "center" }}>
+          Click the status badge to cycle: To do → In progress → Done
+        </p>
       </div>
     </main>
   );
